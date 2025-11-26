@@ -106,6 +106,11 @@ struct dualpi2_sched_data {
 	u32	ecn_mark;	/* packets marked with ECN */
 	u32	step_marks;	/* ECN marks due to the step AQM */
 
+	u32 l_marks;
+	u32 c_marks;
+	u32 dq_count;
+	u32 eq_count;
+
 	struct { /* Deferred drop statistics */
 		u32 cnt;	/* Packets dropped */
 		u32 len;	/* Bytes dropped */
@@ -223,7 +228,8 @@ static bool dualpi2_classic_marking(struct dualpi2_sched_data *q,
 	if (dualpi2_roll(prob) && dualpi2_roll(prob)) {
 		if (overload || dualpi2_skb_cb(skb)->ect == INET_ECN_NOT_ECT)
 			return true;
-		dualpi2_mark(q, skb);
+		if (dualpi2_mark(q, skb))
+			++q->c_marks;
 	}
 	return false;
 }
@@ -257,7 +263,8 @@ static bool dualpi2_scalable_marking(struct dualpi2_sched_data *q,
 		if (dualpi2_skb_cb(skb)->ect == INET_ECN_NOT_ECT)
 			return true;
 mark:
-		dualpi2_mark(q, skb);
+		if (dualpi2_mark(q, skb))
+			++q->l_marks;
 	}
 	return false;
 }
@@ -387,6 +394,8 @@ static int dualpi2_enqueue_skb(struct sk_buff *skb, struct Qdisc *sch,
 		qdisc_drop(skb, sch, to_free);
 		return NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
 	}
+
+	++q->eq_count;
 
 	cb = dualpi2_skb_cb(skb);
 	cb->ts = ktime_get_ns();
@@ -578,6 +587,8 @@ exit:
 		q->deferred_drops.cnt = 0;
 		q->deferred_drops.len = 0;
 	}
+	if(skb)
+		++q->dq_count;
 	return skb;
 
 drop_and_retry:
@@ -898,6 +909,10 @@ static int dualpi2_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 		.ecn_mark	= q->ecn_mark,
 		.credit		= q->c_protection.credit,
 		.step_marks	= q->step_marks,
+		.l_marks	= q->l_marks,
+		.c_marks	= q->c_marks,
+		.dq_count   = q->dq_count,
+		.eq_count   = q->eq_count,
 	};
 	u64 qc, ql;
 
@@ -921,6 +936,10 @@ static void dualpi2_reset(struct Qdisc *sch)
 	q->maxq = 0;
 	q->ecn_mark = 0;
 	q->step_marks = 0;
+	q->l_marks = 0;
+	q->c_marks = 0;
+	q->dq_count = 0;
+	q->eq_count = 0;
 	dualpi2_reset_c_protection(q);
 }
 
