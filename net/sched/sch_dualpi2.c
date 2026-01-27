@@ -110,6 +110,8 @@ struct dualpi2_sched_data {
 	u32 c_marks;
 	u32 dq_count;
 	u32 eq_count;
+	u32 l_drops;
+	u32 c_drops;
 
 	struct { /* Deferred drop statistics */
 		u32 cnt;	/* Packets dropped */
@@ -594,6 +596,10 @@ exit:
 drop_and_retry:
 	++q->deferred_drops.cnt;
 	q->deferred_drops.len += qdisc_pkt_len(skb);
+	if (skb_in_l_queue(skb))
+		++q->l_drops;
+	else
+		++q->c_drops;
 	consume_skb(skb);
 	qdisc_qstats_drop(sch);
 	goto pick_packet;
@@ -913,9 +919,11 @@ static int dualpi2_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 		.c_marks	= q->c_marks,
 		.dq_count   = q->dq_count,
 		.eq_count   = q->eq_count,
+		.l_drops	= q->l_drops,
+		.c_drops	= q->c_drops,
 	};
 	u64 qc, ql;
-
+	
 	get_queue_delays(q, &qc, &ql);
 	st.delay_l = convert_ns_to_usec(ql);
 	st.delay_c = convert_ns_to_usec(qc);
@@ -940,6 +948,8 @@ static void dualpi2_reset(struct Qdisc *sch)
 	q->c_marks = 0;
 	q->dq_count = 0;
 	q->eq_count = 0;
+	q->l_drops = 0;
+	q->c_drops = 0;
 	dualpi2_reset_c_protection(q);
 }
 

@@ -1301,6 +1301,8 @@ struct tc_dualpi2_xstats {
 	__u32 c_marks;		/* ECN marks in C queue */
 	__u32 dq_count;
 	__u32 eq_count;
+	__u32 l_drops;
+	__u32 c_drops;
 };
 
 #endif
